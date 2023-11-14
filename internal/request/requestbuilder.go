@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"barglvojtech.net/webglobeapi/internal/urlparams"
+	"barglvojtech.net/systems90api/internal/urlparams"
 )
 
 type Builder struct {

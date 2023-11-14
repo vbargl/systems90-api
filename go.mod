@@ -1,3 +1,3 @@
-module barglvojtech.net/webglobeapi
+module barglvojtech.net/systems90api
 
 go 1.21.3

@@ -7,15 +7,15 @@ import (
 	"strconv"
 	"time"
 
-	"barglvojtech.net/webglobeapi/internal/request"
-	"barglvojtech.net/webglobeapi/internal/types"
+	"barglvojtech.net/systems90api/internal/request"
+	"barglvojtech.net/systems90api/internal/types"
 )
 
 var (
 	ErrNotLoggedIn = errors.New("to use this endpoint, you need to be logged in")
 )
 
-type WebGlobeApi struct {
+type Systems90Api struct {
 	sess   *session
 	client *http.Client
 
@@ -27,8 +27,8 @@ type session struct {
 	sid string // session id
 }
 
-func NewWebGlobeApi() *WebGlobeApi {
-	return &WebGlobeApi{
+func NewSystems90Api() *Systems90Api {
+	return &Systems90Api{
 		client: &http.Client{},
 		requestBuilder: func(b *request.Builder) {
 			b.Url("https://admin.systems90.cz/api/")
@@ -39,7 +39,7 @@ func NewWebGlobeApi() *WebGlobeApi {
 	}
 }
 
-func (api *WebGlobeApi) hasSession() bool {
+func (api *Systems90Api) hasSession() bool {
 	if api.sess == nil {
 		return false
 	}
@@ -47,7 +47,7 @@ func (api *WebGlobeApi) hasSession() bool {
 	return true
 }
 
-func (api *WebGlobeApi) Login(cred Credentials) error {
+func (api *Systems90Api) Login(cred Credentials) error {
 	if api.hasSession() {
 		return errors.New("already logged in")
 	}
@@ -76,7 +76,7 @@ func (api *WebGlobeApi) Login(cred Credentials) error {
 	return nil
 }
 
-func (api *WebGlobeApi) Logout() error {
+func (api *Systems90Api) Logout() error {
 	if !api.hasSession() {
 		return ErrNotLoggedIn
 	}
@@ -100,7 +100,7 @@ func (api *WebGlobeApi) Logout() error {
 	return nil
 }
 
-func (api *WebGlobeApi) ListDomains() (DomainMap, error) {
+func (api *Systems90Api) ListDomains() (DomainMap, error) {
 	if !api.hasSession() {
 		return nil, ErrNotLoggedIn
 	}
@@ -128,7 +128,7 @@ func (api *WebGlobeApi) ListDomains() (DomainMap, error) {
 	return domains, nil
 }
 
-func (api *WebGlobeApi) ListDNS(domainID string) ([]DNSRecord, error) {
+func (api *Systems90Api) ListDNS(domainID string) ([]DNSRecord, error) {
 	if !api.hasSession() {
 		return nil, ErrNotLoggedIn
 	}
@@ -175,7 +175,7 @@ func (api *WebGlobeApi) ListDNS(domainID string) ([]DNSRecord, error) {
 	return records, nil
 }
 
-func (api *WebGlobeApi) AddDNS(domainID string, dnsRecord *DNSRecord) (string, error) {
+func (api *Systems90Api) AddDNS(domainID string, dnsRecord *DNSRecord) (string, error) {
 	if !api.hasSession() {
 		return "", ErrNotLoggedIn
 	}
@@ -207,7 +207,7 @@ func (api *WebGlobeApi) AddDNS(domainID string, dnsRecord *DNSRecord) (string, e
 	return resp.DNSID, nil
 }
 
-func (api *WebGlobeApi) DeleteDNS(domainID string, dnsRecordId string) error {
+func (api *Systems90Api) DeleteDNS(domainID string, dnsRecordId string) error {
 	if !api.hasSession() {
 		return ErrNotLoggedIn
 	}
