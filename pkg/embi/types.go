@@ -1,13 +1,18 @@
 package embi
 
-import "time"
+import (
+	"time"
+)
 
 type Credentials struct {
 	UID      string
 	Password string
 }
 
-type DomainMap map[string]string
+type Domain struct {
+	DomainID string
+	Zone     string
+}
 
 type DNSRecord struct {
 	ID       string
@@ -68,4 +73,20 @@ func DNSTypeFromString(s string) DNSType {
 	default:
 		return ""
 	}
+}
+
+type SessionDomain struct {
+	SID      string
+	DomainID string
+}
+
+func isInvalidSession(sess any) bool {
+	switch sess := sess.(type) {
+	case string:
+		return sess == ""
+	case SessionDomain:
+		return sess.SID == "" || sess.DomainID == ""
+	}
+
+	return true
 }

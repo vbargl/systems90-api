@@ -27,7 +27,7 @@ func Fetch[T any](client *http.Client, fn func(*Builder)) (*T, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return &val, fmt.Errorf("request: failed %s: %s", req.URL, resp.Status)
+		return &val, fmt.Errorf("request failed %s with status %s", req.URL, resp.Status)
 	}
 	return &val, nil
 }

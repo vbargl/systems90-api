@@ -12,21 +12,16 @@ import (
 )
 
 var (
-	ErrNotLoggedIn = errors.New("to use this endpoint, you need to be logged in")
+	ErrInvalidSession = errors.New("to use this endpoint, you need to be logged in")
 )
 
+// Systems90Api is a basic interface for communication with the Systems90 API.
 type Systems90Api struct {
-	sess   *session
-	client *http.Client
-
+	client         *http.Client
 	requestBuilder func(*request.Builder)
 }
 
-type session struct {
-	uid string // user id
-	sid string // session id
-}
-
+// NewSystems90Api creates a new Systems90Api.
 func NewSystems90Api() *Systems90Api {
 	return &Systems90Api{
 		client: &http.Client{},
@@ -39,19 +34,8 @@ func NewSystems90Api() *Systems90Api {
 	}
 }
 
-func (api *Systems90Api) hasSession() bool {
-	if api.sess == nil {
-		return false
-	}
-
-	return true
-}
-
-func (api *Systems90Api) Login(cred Credentials) error {
-	if api.hasSession() {
-		return errors.New("already logged in")
-	}
-
+// Login logs in to the API and returns a session ID.
+func (api *Systems90Api) Login(cred Credentials) (SID string, err error) {
 	resp, err := request.Fetch[types.LoginResponse](api.client, func(b *request.Builder) {
 		api.requestBuilder(b)
 		b.Method(http.MethodPost)
@@ -64,45 +48,42 @@ func (api *Systems90Api) Login(cred Credentials) error {
 
 	switch {
 	case err != nil && resp != nil:
-		return fmt.Errorf("%w: %s", err, resp.Status.Text)
+		return "", fmt.Errorf("systems90: %w: %s", err, resp.Status.Text)
 	case err != nil:
-		return err
+		return "", err
 	}
 
-	api.sess = &session{
-		uid: resp.UID,
-		sid: resp.SID,
-	}
-	return nil
+	return resp.SID, nil
 }
 
-func (api *Systems90Api) Logout() error {
-	if !api.hasSession() {
-		return ErrNotLoggedIn
+// Logout invalidates the session ID.
+func (api *Systems90Api) Logout(SID string) error {
+	if isInvalidSession(SID) {
+		return ErrInvalidSession
 	}
 
 	resp, err := request.Fetch[types.LogoutResponse](api.client, func(b *request.Builder) {
 		api.requestBuilder(b)
 		b.Path("logout")
 		b.UrlParams(types.LogoutRequest{
-			SID: api.sess.sid,
+			SID: SID,
 		})
 	})
 
 	switch {
 	case err != nil && resp != nil:
-		return fmt.Errorf("%w: %s", err, resp.Status.Text)
+		return fmt.Errorf("systems90: %w: %s", err, resp.Status.Text)
 	case err != nil:
 		return err
 	}
 
-	api.sess = nil
 	return nil
 }
 
-func (api *Systems90Api) ListDomains() (DomainMap, error) {
-	if !api.hasSession() {
-		return nil, ErrNotLoggedIn
+// ListDomains lists all domains registred for logged in UID.
+func (api *Systems90Api) ListDomains(SID string) ([]Domain, error) {
+	if isInvalidSession(SID) {
+		return nil, ErrInvalidSession
 	}
 
 	resp, err := request.Fetch[types.ListDomainsResponse](api.client, func(b *request.Builder) {
@@ -110,27 +91,31 @@ func (api *Systems90Api) ListDomains() (DomainMap, error) {
 		b.Path("domain_list")
 		b.Method(http.MethodGet)
 		b.UrlParams(types.ListDomainsRequest{
-			SID: api.sess.sid,
+			SID: SID,
 		})
 	})
 
 	switch {
 	case err != nil && resp != nil:
-		return nil, fmt.Errorf("%w: %s", err, resp.Status.Text)
+		return nil, fmt.Errorf("systems90: %w: %s", err, resp.Status.Text)
 	case err != nil:
 		return nil, err
 	}
 
-	domains := make(map[string]string)
-	for _, domain := range resp.Domains.Domains {
-		domains[domain.Name] = domain.DomainID
+	domains := make([]Domain, len(resp.Domains.Domains))
+	for i, domain := range resp.Domains.Domains {
+		domains[i] = Domain{
+			DomainID: domain.DomainID,
+			Zone:     domain.Name,
+		}
 	}
 	return domains, nil
 }
 
-func (api *Systems90Api) ListDNS(domainID string) ([]DNSRecord, error) {
-	if !api.hasSession() {
-		return nil, ErrNotLoggedIn
+// ListDNS lists all DNS records for the given domain.
+func (api *Systems90Api) ListDNS(sd SessionDomain) ([]DNSRecord, error) {
+	if isInvalidSession(sd) {
+		return nil, ErrInvalidSession
 	}
 
 	resp, err := request.Fetch[types.ListDnsResponse](api.client, func(b *request.Builder) {
@@ -138,14 +123,14 @@ func (api *Systems90Api) ListDNS(domainID string) ([]DNSRecord, error) {
 		b.Path("domain_list_dns")
 		b.Method(http.MethodGet)
 		b.UrlParams(types.ListDnsRequest{
-			SID:      api.sess.sid,
-			DomainID: domainID,
+			SID:      sd.SID,
+			DomainID: sd.DomainID,
 		})
 	})
 
 	switch {
 	case err != nil && resp != nil:
-		return nil, fmt.Errorf("%w: %s", err, resp.Status.Text)
+		return nil, fmt.Errorf("systems90: %w: %s", err, resp.Status.Text)
 	case err != nil:
 		return nil, err
 	}
@@ -175,9 +160,10 @@ func (api *Systems90Api) ListDNS(domainID string) ([]DNSRecord, error) {
 	return records, nil
 }
 
-func (api *Systems90Api) AddDNS(domainID string, dnsRecord *DNSRecord) (string, error) {
-	if !api.hasSession() {
-		return "", ErrNotLoggedIn
+// AddDNS adds a new DNS record to the given domain.
+func (api *Systems90Api) AddDNS(sd SessionDomain, dnsRecord *DNSRecord) (string, error) {
+	if isInvalidSession(sd) {
+		return "", ErrInvalidSession
 	}
 
 	resp, err := request.Fetch[types.AddDnsResponse](api.client, func(b *request.Builder) {
@@ -185,8 +171,8 @@ func (api *Systems90Api) AddDNS(domainID string, dnsRecord *DNSRecord) (string, 
 		b.Path("domain_add_dns")
 		b.Method(http.MethodPost)
 		b.UrlParams(types.AddDnsRequest_UrlParams{
-			SID:      api.sess.sid,
-			DomainID: domainID,
+			SID:      sd.SID,
+			DomainID: sd.DomainID,
 		})
 		b.Payload(types.AddDnsRequest_Payload{
 			Name:     dnsRecord.Name,
@@ -199,7 +185,7 @@ func (api *Systems90Api) AddDNS(domainID string, dnsRecord *DNSRecord) (string, 
 
 	switch {
 	case err != nil && resp != nil:
-		return "", fmt.Errorf("%w: %s", err, resp.Status.Text)
+		return "", fmt.Errorf("systems90: %w: %s", err, resp.Status.Text)
 	case err != nil:
 		return "", err
 	}
@@ -207,9 +193,10 @@ func (api *Systems90Api) AddDNS(domainID string, dnsRecord *DNSRecord) (string, 
 	return resp.DNSID, nil
 }
 
-func (api *Systems90Api) DeleteDNS(domainID string, dnsRecordId string) error {
-	if !api.hasSession() {
-		return ErrNotLoggedIn
+// DeleteDNS deletes a DNS record from the given domain.
+func (api *Systems90Api) DeleteDNS(sid string, dnsRecordId string) error {
+	if isInvalidSession(sid) {
+		return ErrInvalidSession
 	}
 
 	resp, err := request.Fetch[types.DeleteDnsResponse](api.client, func(b *request.Builder) {
@@ -217,14 +204,14 @@ func (api *Systems90Api) DeleteDNS(domainID string, dnsRecordId string) error {
 		b.Path("domain_delete_dns")
 		b.Method(http.MethodGet)
 		b.UrlParams(types.DeleteDnsRequest{
-			SID:   api.sess.sid,
+			SID:   sid,
 			DNSID: dnsRecordId,
 		})
 	})
 
 	switch {
 	case err != nil && resp != nil:
-		return fmt.Errorf("%w: %s", err, resp.Status.Text)
+		return fmt.Errorf("systems90: %w: %s", err, resp.Status.Text)
 	case err != nil:
 		return err
 	}
